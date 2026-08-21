@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>レトロ・プラットフォーマー (Ability Stages & Coin Boost)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #1a202c;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        canvas {
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            border-radius: 0.5rem;
+        }
+        input[type=range] {
+            accent-color: #38bdf8;
+            cursor: pointer;
+        }
+        input[type=color] {
+            -webkit-appearance: none;
+            border: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            background: none;
+        }
+        input[type=color]::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        input[type=color]::-webkit-color-swatch {
+            border: 2px solid #fff;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="text-center mb-3">
+        <h1 class="text-3xl font-bold tracking-wider text-yellow-400 mb-1">レトロ・プラットフォーマー <span class="text-sm bg-indigo-600 px-2 py-1 rounded text-white ml-2">特性活用ステージ＆コイン増量版</span></h1>
+        <p id="ability-desc" class="text-sm text-gray-300 font-bold mt-1">🐰 ウサギ: バランスが良くスタンダードな性能！</p>
+    </div>
+
+    <!-- コントロールパネル -->
+    <div class="mb-4 flex flex-col md:flex-row gap-3 items-center justify-center bg-gray-800 p-3 rounded-xl border border-gray-700 shadow max-w-[850px] w-full text-xs">
+        <!-- ショップボタン -->
+        <div class="flex gap-1 items-center justify-center">
+            <span class="font-bold text-gray-300 mr-1">ショップ:</span>
+            <button onclick="openShopModal()" class="px-3 py-1.5 rounded bg-yellow-600 hover:bg-yellow-500 text-white font-bold transition shadow flex items-center gap-1">🛒 アニマルショップ</button>
+        </div>
+        <div class="hidden md:block h-5 w-[1px] bg-gray-600"></div>
+        <!-- カラー選択 -->
+        <div class="flex gap-2 items-center justify-center">
+            <span class="font-bold text-gray-300">カラー:</span>
+            <input type="color" id="colorPicker" value="#38bdf8" oninput="changeColor(this.value)" title="好きな色に変更">
+            <div class="flex gap-1">
+                <button onclick="changeColor('#38bdf8'); document.getElementById('colorPicker').value='#38bdf8';" class="w-4 h-4 rounded-full bg-[#38bdf8] border border-white"></button>
+                <button onclick="changeColor('#f6ad55'); document.getElementById('colorPicker').value='#f6ad55';" class="w-4 h-4 rounded-full bg-[#f6ad55] border border-white"></button>
+                <button onclick="changeColor('#48bb78'); document.getElementById('colorPicker').value='#48bb78';" class="w-4 h-4 rounded-full bg-[#48bb78] border border-white"></button>
+                <button onclick="changeColor('#ed64a6'); document.getElementById('colorPicker').value='#ed64a6';" class="w-4 h-4 rounded-full bg-[#ed64a6] border border-white"></button>
+            </div>
+        </div>
+        <div class="hidden md:block h-5 w-[1px] bg-gray-600"></div>
+        <!-- ヒント & BGM -->
+        <div class="flex gap-2 items-center justify-center">
+            <button id="hintBtn" onclick="toggleHint()" class="px-2.5 py-1 rounded bg-sky-600 hover:bg-sky-500 font-bold text-white transition shadow">💡ヒント: OFF</button>
+            <select id="bgmTrackSelect" onchange="changeBgmTrack(this.value)" class="bg-gray-700 border border-gray-600 rounded px-1.5 py-1 text-white font-bold outline-none">
+                <option value="track1">曲01</option>
+                <option value="track2">曲02</option>
+                <option value="track3">曲03</option>
+            </select>
+            <button id="bgmToggleBtn" onclick="toggleBGM()" class="px-2 py-1 rounded bg-yellow-600 hover:bg-yellow-500 font-bold text-white transition">BGM:OFF</button>
+            <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="0.3" oninput="changeVolume(this.value)" class="w-12">
+        </div>
+    </div>
+
+    <div class="relative">
+        <canvas id="gameCanvas" width="800" height="450" class="w-full max-w-full h-auto"></canvas>
+        
+        <div id="ui-overlay" class="absolute top-4 left-4 right-4 flex justify-between pointer-events-none font-bold text-lg text-white drop-shadow">
+            <span id="score-display">スコア: 0 (コイン: <span id="coin-count">0</span>C)</span>
+            <span id="level-display">ステージ: 1 / 4</span>
+        </div>
+    </div>
+
+    <!-- Mobile / Touch Controls -->
+    <div class="mt-6 flex gap-4 w-full max-w-[800px] justify-between px-4">
+        <div class="flex gap-2">
+            <button id="leftBtn" class="bg-gray-700 hover:bg-gray-600 active:bg-gray-500 px-6 py-4 rounded-xl text-2xl font-bold shadow-lg touch-manipulation">◀</button>
+            <button id="rightBtn" class="bg-gray-700 hover:bg-gray-600 active:bg-gray-500 px-6 py-4 rounded-xl text-2xl font-bold shadow-lg touch-manipulation">▶</button>
+        </div>
+        <div>
+            <button id="jumpBtn" class="bg-yellow-600 hover:bg-yellow-500 active:bg-yellow-400 px-8 py-4 rounded-xl text-2xl font-bold shadow-lg touch-manipulation">ジャンプ</button>
+        </div>
+    </div>
+
+    <!-- 動物ショップ モーダル -->
+    <div id="shopModal" class="fixed inset-0 bg-black/70 flex items-center justify-center hidden z-50">
+        <div class="bg-gray-800 border-2 border-yellow-500 p-6 rounded-xl text-center max-w-md w-full mx-4 shadow-2xl">
+            <h2 class="text-2xl font-bold text-yellow-400 mb-1">🛒 アニマルショップ</h2>
+            <p class="text-xs text-gray-300 mb-4">高難度ステージを進むには強力なアビリティを持つ動物が必要だ！</p>
+            
+            <div id="shop-items-container" class="flex flex-col gap-2.5 mb-6 max-h-[280px] overflow-y-auto pr-1">
+                <!-- JSで動的生成 -->
+            </div>
+
+            <button onclick="closeShopModal()" class="bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-bold px-6 py-2.5 rounded-lg w-full transition-colors">ゲームに戻る</button>
+        </div>
+    </div>
+
+    <!-- Message Modal Overlay -->
+    <div id="messageModal" class="fixed inset-0 bg-black/70 flex items-center justify-center hidden z-50">
+        <div class="bg-gray-800 border-2 border-yellow-500 p-8 rounded-xl text-center max-w-sm w-full mx-4 shadow-2xl">
+            <h2 id="modalTitle" class="text-2xl font-bold text-yellow-400 mb-4">ゲームオーバー</h2>
+            <p id="modalText" class="text-gray-300 mb-6">もう一度挑戦しますか？</p>
+            <button id="modalBtn" class="bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-bold px-6 py-3 rounded-lg w-full transition-colors">リトライ</button>
+        </div>
+    </div>
+
+    <script>
+        let audioCtx = null;
+        let bgmInterval = null;
+        let isBgmPlaying = false;
+        let masterVolume = 0.3;
+        let currentTrack = 'track1';
+        
+        let consecutiveGameOverCount = 0; 
+        let showHintLine = false;
+        let totalCoins = 500; // 最初から少し持たせておき、取り逃がしても安心
+
+        // 7種類の動物データ＆固有の能力設定
+        const animalsData = {
+            rabbit: { name: 'ウサギ', icon: '🐰', unlocked: true, price: 0, speed: 2.3, jumpPower: -5.2, gravity: 0.26, float: false, desc: '🐰 ウサギ: スタンダードな性能' },
+            cat:    { name: 'ネコ',   icon: '🐱', unlocked: false, price: 150, speed: 2.9, jumpPower: -4.8, gravity: 0.26, float: false, desc: '🐱 ネコ: 高速移動で走り回る' },
+            dog:    { name: 'イヌ',   icon: '🐶', unlocked: false, price: 300, speed: 2.3, jumpPower: -5.8, gravity: 0.26, float: false, desc: '🐶 イヌ: 高めのジャンプ力' },
+            penguin:{ name: 'ペンギン', icon: '🐧', unlocked: false, price: 450, speed: 2.1, jumpPower: -4.6, gravity: 0.16, float: true,  desc: '🐧 ペンギン: 広いギャップをふわふわ浮遊で渡る' },
+            bear:   { name: 'クマ',   icon: '🐻', unlocked: false, price: 600, speed: 1.9, jumpPower: -6.3, gravity: 0.28, float: false, desc: '🐻 クマ: 超強力なハイパージャンプ' },
+            fox:    { name: 'キツネ', icon: '🦊', unlocked: false, price: 800, speed: 3.2, jumpPower: -5.2, gravity: 0.26, float: false, desc: '🦊 キツネ: 最高峰の俊敏性ダッシュ' },
+            frog:   { name: 'カエル', icon: '🐸', unlocked: false, price: 1000, speed: 2.4, jumpPower: -6.9, gravity: 0.24, float: false, desc: '🐸 カエル: 絶壁を一発で登りきる大ジャンプ' }
+        };
+
+        function openShopModal() {
+            renderShopItems();
+            document.getElementById('shopModal').classList.remove('hidden');
+        }
+
+        function closeShopModal() {
+            document.getElementById('shopModal').classList.add('hidden');
+        }
+
+        function renderShopItems() {
+            const container = document.getElementById('shop-items-container');
+            container.innerHTML = '';
+
+            for (let key in animalsData) {
+                let animal = animalsData[key];
+                let isSelected = (player.animal === key);
+
+                let btnHtml = '';
+                if (animal.unlocked) {
+                    if (isSelected) {
+                        btnHtml = `<span class="px-2.5 py-1 bg-green-700 text-white font-bold rounded text-xs">使用中</span>`;
+                    } else {
+                        btnHtml = `<button onclick="selectAnimal('${key}')" class="px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded text-xs transition">えらぶ</button>`;
+                    }
+                } else {
+                    if (totalCoins >= animal.price) {
+                        btnHtml = `<button onclick="buyAnimal('${key}')" class="px-2.5 py-1 bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-bold rounded text-xs transition">解放 (${animal.price}C)</button>`;
+                    } else {
+                        btnHtml = `<span class="px-2.5 py-1 bg-gray-700 text-gray-400 font-bold rounded text-xs">必要: ${animal.price}C</span>`;
+                    }
+                }
+
+                container.innerHTML += `
+                    <div class="flex items-center justify-between bg-gray-700/60 p-2.5 rounded-lg border border-gray-600 text-left">
+                        <div>
+                            <div class="flex items-center gap-1.5 font-bold text-sm">
+                                <span class="text-lg">${animal.icon}</span>
+                                <span>${animal.name}</span>
+                            </div>
+                            <div class="text-[10px] text-gray-400 mt-0.5">${animal.desc}</div>
+                        </div>
+                        <div class="shrink-0 ml-2">${btnHtml}</div>
+                    </div>
+                `;
+            }
+        }
+
+        function selectAnimal(key) {
+            if (animalsData[key].unlocked) {
+                player.animal = key;
+                applyAnimalStats();
+                renderShopItems();
+            }
+        }
+
+        function buyAnimal(key) {
+            let animal = animalsData[key];
+            if (!animal.unlocked && totalCoins >= animal.price) {
+                totalCoins -= animal.price;
+                animal.unlocked = true;
+                player.animal = key;
+                applyAnimalStats();
+                playSound('coin');
+                renderShopItems();
+            }
+        }
+
+        function applyAnimalStats() {
+            const data = animalsData[player.animal];
+            player.speed = data.speed;
+            player.minJumpPower = data.jumpPower;
+            player.maxJumpPower = data.jumpPower;
+            player.gravity = data.gravity;
+            player.floatAbility = data.float;
+            document.getElementById('ability-desc').innerText = data.desc;
+        }
+
+        function toggleHint() {
+            showHintLine = !showHintLine;
+            const btn = document.getElementById('hintBtn');
+            if (showHintLine) {
+                btn.innerText = "💡ヒント: ON";
+                btn.classList.remove('bg-sky-600', 'hover:bg-sky-500');
+                btn.classList.add('bg-emerald-600', 'hover:bg-emerald-500');
+            } else {
+                btn.innerText = "💡ヒント: OFF";
+                btn.classList.remove('bg-emerald-600', 'hover:bg-emerald-500');
+                btn.classList.add('bg-sky-600', 'hover:bg-sky-500');
+            }
+        }
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        const bgmTracks = {
+            track1: [261.63, 329.63, 392.00, 523.25, 392.00, 329.63, 261.63, 196.00],
+            track2: [220.00, 246.94, 261.63, 329.63, 349.23, 329.63, 261.63, 246.94],
+            track3: [392.00, 440.00, 523.25, 587.33, 523.25, 440.00, 392.00, 329.63]
+        };
+        let bgmStep = 0;
+
+        function playBgmNote() {
+            if (!isBgmPlaying || !audioCtx) return;
+            const notes = bgmTracks[currentTrack];
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(notes[bgmStep], audioCtx.currentTime);
+            
+            gain.gain.setValueAtTime(masterVolume * 0.25, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.22);
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.25);
+
+            bgmStep = (bgmStep + 1) % notes.length;
+        }
+
+        function toggleBGM() {
+            initAudio();
+            isBgmPlaying = !isBgmPlaying;
+            const btn = document.getElementById('bgmToggleBtn');
+            if (isBgmPlaying) {
+                btn.innerText = "BGM:ON";
+                btn.classList.remove('bg-yellow-600', 'hover:bg-yellow-500');
+                btn.classList.add('bg-green-600', 'hover:bg-green-500');
+                if (!bgmInterval) {
+                    bgmInterval = setInterval(playBgmNote, 220);
+                }
+            } else {
+                btn.innerText = "BGM:OFF";
+                btn.classList.remove('bg-green-600', 'hover:bg-green-500');
+                btn.classList.add('bg-yellow-600', 'hover:bg-yellow-500');
+                if (bgmInterval) {
+                    clearInterval(bgmInterval);
+                    bgmInterval = null;
+                }
+            }
+        }
+
+        function changeBgmTrack(trackName) {
+            currentTrack = trackName;
+            bgmStep = 0;
+        }
+
+        function changeVolume(val) {
+            masterVolume = parseFloat(val);
+        }
+
+        function playSound(type) {
+            initAudio();
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            const now = audioCtx.currentTime;
+
+            if (type === 'jump') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.exponentialRampToValueAtTime(600, now + 0.15);
+                gain.gain.setValueAtTime(masterVolume * 0.4, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(now + 0.15);
+            } else if (type === 'coin') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(523.25, now);
+                osc.frequency.setValueAtTime(783.99, now + 0.08);
+                gain.gain.setValueAtTime(masterVolume * 0.4, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(now + 0.2);
+            } else if (type === 'gameover') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.linearRampToValueAtTime(80, now + 0.4);
+                gain.gain.setValueAtTime(masterVolume * 0.5, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(now + 0.4);
+            } else if (type === 'clear') {
+                const notes = [440, 554.37, 659.25, 880];
+                notes.forEach((freq, index) => {
+                    const cOsc = audioCtx.createOscillator();
+                    const cGain = audioCtx.createGain();
+                    cOsc.type = 'triangle';
+                    cOsc.frequency.setValueAtTime(freq, now + index * 0.1);
+                    cGain.gain.setValueAtTime(masterVolume * 0.4, now + index * 0.1);
+                    cGain.gain.exponentialRampToValueAtTime(0.01, now + index * 0.1 + 0.2);
+                    cOsc.connect(cGain);
+                    cGain.connect(audioCtx.destination);
+                    cOsc.start(now + index * 0.1);
+                    cOsc.stop(now + index * 0.1 + 0.2);
+                });
+            }
+        }
+
+        function changeColor(hexColor) {
+            player.color = hexColor;
+        }
+
+        const difficulties = {
+            easy: { movingSpeedMult: 0.5, name: 'かんたん' },
+            normal: { movingSpeedMult: 0.8, name: 'ふつう' },
+            hard: { movingSpeedMult: 1.1, name: 'むずかしい' }
+        };
+        let currentDifficulty = 'easy';
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let gameState = 'playing';
+        let score = 0;
+        let currentLevel = 1;
+        const maxLevel = 4;
+        let cameraY = 0;
+
+        const keys = { left: false, right: false, jump: false };
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
+            if (e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
+            if (e.key === 'ArrowUp' || e.key === ' ' || e.key === 'w') {
+                if (!keys.jump) startJump();
+                keys.jump = true;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = false;
+            if (e.key === 'ArrowRight' || e.key === 'd') keys.right = false;
+            if (e.key === 'ArrowUp' || e.key === ' ' || e.key === 'w') {
+                keys.jump = false;
+                endJump();
+            }
+        });
+
+        const bindTouch = (id, keyName) => {
+            const btn = document.getElementById(id);
+            btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[keyName] = true; if(keyName === 'jump') startJump(); });
+            btn.addEventListener('touchend', (e) => { e.preventDefault(); keys[keyName] = false; if(keyName === 'jump') endJump(); });
+            btn.addEventListener('mousedown', () => { keys[keyName] = true; if(keyName === 'jump') startJump(); });
+            btn.addEventListener('mouseup', () => { keys[keyName] = false; if(keyName === 'jump') endJump(); });
+            btn.addEventListener('mouseleave', () => { keys[keyName] = false; if(keyName === 'jump') endJump(); });
+        };
+        bindTouch('leftBtn', 'left');
+        bindTouch('rightBtn', 'right');
+        bindTouch('jumpBtn', 'jump');
+
+        function startJump() {
+            if (player.grounded && gameState === 'playing') {
+                player.vy = player.minJumpPower;
+                player.isJumping = true;
+                player.jumpTimer = 0;
+                player.grounded = false;
+                player.onMovingPlatform = null;
+                playSound('jump');
+            }
+        }
+
+        function endJump() {
+            if (player.isJumping && player.vy < 0) {
+                player.isJumping = false;
+            }
+        }
+
+        let player = {
+            x: 50,
+            y: 750,
+            width: 28,
+            height: 32,
+            vx: 0,
+            vy: 0,
+            speed: 2.3,          
+            gravity: 0.26,       
+            minJumpPower: -5.2,  
+            maxJumpPower: -5.2, 
+            jumpHoldDuration: 18,
+            jumpTimer: 0,
+            isJumping: false,
+            grounded: false,
+            onMovingPlatform: null,
+            animal: 'rabbit', 
+            color: '#38bdf8',
+            floatAbility: false,
+            animFrame: 0
+        };
+
+        let platforms = [];
+        let movingPlatforms = [];
+        let coins = [];
+        let hazards = [];
+        let goal = {};
+        let jumpArcs = [];
+
+        function loadLevel(level) {
+            platforms = [];
+            movingPlatforms = [];
+            coins = [];
+            hazards = [];
+            jumpArcs = [];
+
+            player.x = 50;
+            player.vx = 0;
+            player.vy = 0;
+            player.isJumping = false;
+            player.onMovingPlatform = null;
+
+            const diffMult = difficulties[currentDifficulty].movingSpeedMult;
+
+            if (level === 1) {
+                player.y = 800;
+                cameraY = 450;
+                platforms = [
+                    { x: 0, y: 850, w: 800, h: 50 },
+                    { x: 120, y: 720, w: 140, h: 20 },
+                    { x: 340, y: 590, w: 140, h: 20 },
+                    { x: 180, y: 460, w: 140, h: 20 },
+                    { x: 380, y: 330, w: 140, h: 20 },
+                    { x: 250, y: 180, w: 180, h: 20 }
+                ];
+                // コイン配置を増量
+                coins = [
+                    { x: 170, y: 670, w: 16, h: 16, collected: false },
+                    { x: 200, y: 670, w: 16, h: 16, collected: false },
+                    { x: 390, y: 540, w: 16, h: 16, collected: false },
+                    { x: 420, y: 540, w: 16, h: 16, collected: false },
+                    { x: 230, y: 410, w: 16, h: 16, collected: false },
+                    { x: 430, y: 280, w: 16, h: 16, collected: false },
+                    { x: 300, y: 200, w: 16, h: 16, collected: false }
+                ];
+                hazards = currentDifficulty === 'easy' ? [] : [{ x: 300, y: 830, w: 30, h: 20 }];
+                goal = { x: 320, y: 110, w: 30, h: 60 };
+                jumpArcs = [
+                    { startX: 100, startY: 850, vx: 2.3, jumpPower: player.minJumpPower, hold: 18, gravity: player.gravity }
+                ];
+            } else if (level === 2) {
+                player.y = 900;
+                cameraY = 550;
+                platforms = [
+                    { x: 0, y: 950, w: 800, h: 50 },
+                    { x: 100, y: 810, w: 140, h: 20 },
+                    { x: 320, y: 680, w: 140, h: 20 },
+                    { x: 520, y: 540, w: 130, h: 20 },
+                    { x: 280, y: 400, w: 140, h: 20 },
+                    { x: 100, y: 260, w: 140, h: 20 },
+                    { x: 350, y: 100, w: 160, h: 20 }
+                ];
+                coins = [
+                    { x: 160, y: 760, w: 16, h: 16, collected: false },
+                    { x: 380, y: 630, w: 16, h: 16, collected: false },
+                    { x: 570, y: 490, w: 16, h: 16, collected: false },
+                    { x: 330, y: 350, w: 16, h: 16, collected: false },
+                    { x: 160, y: 210, w: 16, h: 16, collected: false },
+                    { x: 400, y: 60,  w: 16, h: 16, collected: false }
+                ];
+                hazards = currentDifficulty === 'easy' ? [] : [{ x: 260, y: 930, w: 40, h: 20 }];
+                goal = { x: 415, y: 30, w: 30, h: 60 };
+                jumpArcs = [
+                    { startX: 80,  startY: 950, vx: 2.3, jumpPower: player.minJumpPower, hold: 18, gravity: player.gravity }
+                ];
+            } else if (level === 3) {
+                // ステージ3：ペンギンの浮遊やイヌ・クマの高いジャンプが有利になる構成
+                player.y = 900;
+                cameraY = 550;
+                platforms = [
+                    { x: 0, y: 950, w: 800, h: 50 },
+                    { x: 80, y: 810, w: 90, h: 20 },
+                    { x: 580, y: 90,  w: 140, h: 20 }
+                ];
+                movingPlatforms = [
+                    { x: 200, y: 670, w: 90, h: 20, minX: 130, maxX: 450, speed: Math.max(0.5, 0.7 * diffMult) },
+                    { x: 300, y: 510, w: 90, h: 20, minX: 180, maxX: 500, speed: Math.max(0.5, 0.9 * diffMult) },
+                    { x: 250, y: 350, w: 90, h: 20, minX: 130, maxX: 450, speed: Math.max(0.5, 0.8 * diffMult) }
+                ];
+                coins = [
+                    { x: 110, y: 760, w: 16, h: 16, collected: false },
+                    { x: 240, y: 620, w: 16, h: 16, collected: false },
+                    { x: 340, y: 460, w: 16, h: 16, collected: false },
+                    { x: 290, y: 300, w: 16, h: 16, collected: false },
+                    { x: 450, y: 200, w: 16, h: 16, collected: false }
+                ];
+                hazards = [{ x: 200, y: 930, w: 500, h: 20 }];
+                goal = { x: 635, y: 30, w: 30, h: 60 };
+                jumpArcs = [
+                    { startX: 80,  startY: 950, vx: 2.3, jumpPower: player.minJumpPower, hold: 18, gravity: player.gravity }
+                ];
+            } else if (level === 4) {
+                // ステージ4：カエルやクマの超強力ジャンプ、あるいはキツネのスピードがないと超えられない高所・ワイドギャップの特性活用ステージ！
+                player.y = 900;
+                cameraY = 550;
+                platforms = [
+                    { x: 0, y: 950, w: 800, h: 50 },
+                    { x: 50, y: 820, w: 70, h: 20 },
+                    { x: 680, y: 70,  w: 90, h: 20 }  // 通常キャラだとジャンプが届きにくい高所ゴール
+                ];
+                movingPlatforms = [
+                    { x: 150, y: 680, w: 80, h: 20, minX: 80, maxX: 350, speed: Math.max(0.6, 0.9 * diffMult) },
+                    { x: 450, y: 520, w: 80, h: 20, minX: 380, maxX: 700, speed: Math.max(0.6, 1.1 * diffMult) },
+                    { x: 200, y: 360, w: 80, h: 20, minX: 100, maxX: 450, speed: Math.max(0.6, 1.0 * diffMult) },
+                    { x: 500, y: 200, w: 80, h: 20, minX: 300, maxX: 650, speed: Math.max(0.6, 1.2 * diffMult) }
+                ];
+                coins = [
+                    { x: 80,  y: 770, w: 16, h: 16, collected: false },
+                    { x: 200, y: 630, w: 16, h: 16, collected: false },
+                    { x: 500, y: 470, w: 16, h: 16, collected: false },
+                    { x: 250, y: 310, w: 16, h: 16, collected: false },
+                    { x: 550, y: 150, w: 16, h: 16, collected: false },
+                    { x: 380, y: 400, w: 16, h: 16, collected: false }
+                ];
+                hazards = [{ x: 100, y: 930, w: 650, h: 20 }];
+                goal = { x: 710, y: 10, w: 30, h: 60 };
+                jumpArcs = [
+                    { startX: 60,  startY: 950, vx: 2.3, jumpPower: player.minJumpPower, hold: 18, gravity: player.gravity }
+                ];
+            }
+        }
+
+        function checkCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.w &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.h &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        function update() {
+            if (gameState !== 'playing') return;
+
+            for (let mp of movingPlatforms) {
+                mp.x += mp.speed;
+                if (mp.x <= mp.minX || mp.x + mp.w >= mp.maxX) {
+                    mp.speed *= -1;
+                    mp.x = Math.max(mp.minX, Math.min(mp.x, mp.maxX - mp.w));
+                }
+            }
+
+            if (keys.left) {
+                player.vx = -player.speed;
+                player.animFrame += 0.2;
+            } else if (keys.right) {
+                player.vx = player.speed;
+                player.animFrame += 0.2;
+            } else {
+                player.vx = 0;
+                player.animFrame = 0;
+            }
+
+            if (player.isJumping && keys.jump) {
+                player.jumpTimer++;
+                if (player.jumpTimer < player.jumpHoldDuration) {
+                    player.vy -= (player.floatAbility ? 0.30 : 0.45); 
+                } else {
+                    player.isJumping = false;
+                }
+            } else {
+                player.isJumping = false;
+            }
+
+            player.vy += player.gravity;
+
+            if (player.onMovingPlatform) {
+                player.x += player.onMovingPlatform.speed;
+            }
+
+            player.x += player.vx;
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+
+            for (let p of platforms) {
+                if (checkCollision(player, p)) {
+                    if (player.vx > 0) {
+                        player.x = p.x - player.width;
+                    } else if (player.vx < 0) {
+                        player.x = p.x + p.w;
+                    }
+                }
+            }
+
+            for (let mp of movingPlatforms) {
+                if (checkCollision(player, mp)) {
+                    if (player.vx > 0) {
+                        player.x = mp.x - player.width;
+                    } else if (player.vx < 0) {
+                        player.x = mp.x + mp.w;
+                    }
+                }
+            }
+
+            player.y += player.vy;
+            player.grounded = false;
+            player.onMovingPlatform = null;
+
+            for (let p of platforms) {
+                if (checkCollision(player, p)) {
+                    if (player.vy > 0) {
+                        player.y = p.y - player.height;
+                        player.vy = 0;
+                        player.grounded = true;
+                        player.isJumping = false;
+                    } else if (player.vy < 0) {
+                        player.y = p.y + p.h;
+                        player.vy = 0;
+                        player.isJumping = false;
+                    }
+                }
+            }
+
+            for (let mp of movingPlatforms) {
+                if (checkCollision(player, mp)) {
+                    if (player.vy > 0) {
+                        player.y = mp.y - player.height;
+                        player.vy = 0;
+                        player.grounded = true;
+                        player.isJumping = false;
+                        player.onMovingPlatform = mp;
+                    } else if (player.vy < 0) {
+                        player.y = mp.y + mp.h;
+                        player.vy = 0;
+                        player.isJumping = false;
+                    }
+                }
+            }
+
+            let targetCameraY = player.y - canvas.height / 2;
+            cameraY += (targetCameraY - cameraY) * 0.1;
+            if (cameraY > 550) cameraY = 550;
+            if (cameraY < -300) cameraY = -300;
+
+            let groundY = (currentLevel === 1) ? 850 : 950;
+            if (player.y >= groundY) {
+                triggerGameOver();
+            }
+
+            for (let c of coins) {
+                if (!c.collected && checkCollision(player, c)) {
+                    c.collected = true;
+                    score += 100;
+                    totalCoins += 100;
+                    playSound('coin');
+                }
+            }
+
+            for (let h of hazards) {
+                if (checkCollision(player, h)) {
+                    triggerGameOver();
+                }
+            }
+
+            if (checkCollision(player, goal)) {
+                if (currentLevel < maxLevel) {
+                    currentLevel++;
+                    consecutiveGameOverCount = 0;
+                    loadLevel(currentLevel);
+                    playSound('clear');
+                } else {
+                    gameClear();
+                }
+            }
+
+            document.getElementById('score-display').innerHTML = `スコア: ${score} (コイン: <span class="text-yellow-400">${totalCoins}C</span>)`;
+            document.getElementById('level-display').innerText = `ステージ: ${currentLevel} / ${maxLevel}`;
+        }
+
+        function triggerGameOver() {
+            gameState = 'gameover';
+            consecutiveGameOverCount++;
+            playSound('gameover');
+
+            let titleText = 'ゲームオーバー';
+            let messageText = `ステージ ${currentLevel} の最初からリトライします。`;
+
+            if (consecutiveGameOverCount >= 3) {
+                titleText = 'ゲームオーバー（3回連続）';
+                messageText = '3回連続で失敗したため、ステージ1からやり直しになります！';
+            }
+
+            showModal(titleText, messageText, 'リトライ', () => {
+                if (consecutiveGameOverCount >= 3) {
+                    currentLevel = 1;
+                    consecutiveGameOverCount = 0;
+                }
+                loadLevel(currentLevel);
+                gameState = 'playing';
+            });
+        }
+
+        function drawAnimal(x, y, w, h, animal, color) {
+            ctx.fillStyle = color;
+            let legOffset = Math.sin(player.animFrame) * 4;
+            let isAir = !player.grounded;
+
+            if (animal === 'rabbit') {
+                ctx.fillRect(x + 4, y - 10, 5, 12);
+                ctx.fillRect(x + w - 9, y - 10, 5, 12);
+                ctx.fillRect(x + 2, y + 6, w - 4, h - 10);
+                ctx.fillStyle = '#ff69b4';
+                ctx.fillRect(x + 6, y + 8, w - 12, 4);
+            } else if (animal === 'cat') {
+                ctx.beginPath();
+                ctx.moveTo(x, y + 6); ctx.lineTo(x + 6, y - 4); ctx.lineTo(x + 10, y + 6); ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(x + w, y + 6); ctx.lineTo(x + w - 6, y - 4); ctx.lineTo(x + w - 10, y + 6); ctx.fill();
+                ctx.fillStyle = color;
+                ctx.fillRect(x + 2, y + 4, w - 4, h - 8);
+                ctx.fillStyle = '#ef4444';
+                ctx.fillRect(x + 4, y + 8, w - 8, 3);
+            } else if (animal === 'dog') {
+                ctx.fillStyle = '#d97706';
+                ctx.fillRect(x - 3, y + 2, 5, 12);
+                ctx.fillRect(x + w - 2, y + 2, 5, 12);
+                ctx.fillStyle = color;
+                ctx.fillRect(x + 2, y + 4, w - 4, h - 8);
+                ctx.fillStyle = '#b45309';
+                ctx.fillRect(x + 4, y + 12, 6, 6);
+            } else if (animal === 'penguin') {
+                ctx.fillStyle = color;
+                ctx.fillRect(x + 2, y + 2, w - 4, h - 8);
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(x + 6, y + 8, w - 12, h - 10);
+                ctx.fillStyle = '#f59e0b';
+                ctx.fillRect(x + w / 2 - 3, y + 6, 6, 4);
+            } else if (animal === 'bear') {
+                ctx.fillRect(x - 2, y, 8, 8);
+                ctx.fillRect(x + w - 6, y, 8, 8);
+                ctx.fillStyle = color;
+                ctx.fillRect(x, y + 4, w, h - 8);
+                ctx.fillStyle = '#78350f';
+                ctx.fillRect(x + 6, y + 12, w - 12, 6);
+            } else if (animal === 'fox') {
+                ctx.beginPath();
+                ctx.moveTo(x - 2, y + 8); ctx.lineTo(x + 6, y - 4); ctx.lineTo(x + 8, y + 8); ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(x + w + 2, y + 8); ctx.lineTo(x + w - 6, y - 4); ctx.lineTo(x + w - 8, y + 8); ctx.fill();
+                ctx.fillStyle = color;
+                ctx.fillRect(x + 2, y + 4, w - 4, h - 8);
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(x + 8, y + 10, w - 16, 8);
+            } else if (animal === 'frog') {
+                ctx.fillStyle = color;
+                ctx.fillRect(x + 2, y - 4, 8, 8);
+                ctx.fillRect(x + w - 10, y - 4, 8, 8);
+                ctx.fillStyle = color;
+                ctx.fillRect(x + 2, y + 4, w - 4, h - 8);
+                ctx.fillStyle = '#84cc16';
+                ctx.fillRect(x + 6, y + 12, w - 12, 4);
+            }
+
+            ctx.fillStyle = '#1a202c';
+            ctx.fillRect(x + 6, y + 6, 3, 3);
+            ctx.fillRect(x + w - 9, y + 6, 3, 3);
+
+            ctx.fillStyle = color;
+            if (isAir) {
+                ctx.fillRect(x + 4, y + h - 6, 6, 6);
+                ctx.fillRect(x + w - 10, y + h - 2, 6, 6);
+            } else {
+                ctx.fillRect(x + 5, y + h - 4 + legOffset, 5, 6);
+                ctx.fillRect(x + w - 10, y + h - 4 - legOffset, 5, 6);
+            }
+        }
+
+        function draw() {
+            const bgGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            bgGrad.addColorStop(0, '#1a365d');
+            bgGrad.addColorStop(1, '#2a4365');
+            ctx.fillStyle = bgGrad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.save();
+            ctx.translate(0, -cameraY);
+
+            if (showHintLine && jumpArcs.length > 0) {
+                ctx.strokeStyle = 'rgba(56, 189, 248, 0.8)';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([6, 6]);
+
+                for (let arc of jumpArcs) {
+                    ctx.beginPath();
+                    let simX = arc.startX;
+                    let simY = arc.startY;
+                    let simVy = arc.jumpPower;
+                    let simTimer = 0;
+
+                    ctx.moveTo(simX, simY);
+
+                    for (let step = 0; step < 45; step++) {
+                        simTimer++;
+                        if (simTimer < arc.hold) {
+                            simVy -= (player.floatAbility ? 0.30 : 0.45);
+                        }
+                        simVy += arc.gravity;
+                        simX += arc.vx;
+                        simY += simVy;
+                        ctx.lineTo(simX, simY);
+                    }
+                    ctx.stroke();
+                }
+                ctx.setLineDash([]);
+            }
+
+            ctx.fillStyle = '#4a5568';
+            for (let p of platforms) {
+                ctx.fillRect(p.x, p.y, p.w, p.h);
+                ctx.fillStyle = '#718096';
+                ctx.fillRect(p.x, p.y, p.w, 4);
+                ctx.fillStyle = '#4a5568';
+            }
+
+            ctx.fillStyle = '#319795';
+            for (let mp of movingPlatforms) {
+                ctx.fillRect(mp.x, mp.y, mp.w, mp.h);
+                ctx.fillStyle = '#4fd1c5';
+                ctx.fillRect(mp.x, mp.y, mp.w, 4);
+                ctx.fillStyle = '#319795';
+            }
+
+            ctx.fillStyle = '#f56565';
+            for (let h of hazards) {
+                let spikeWidth = 20;
+                let count = Math.ceil(h.w / spikeWidth);
+                for (let i = 0; i < count; i++) {
+                    let sx = h.x + i * spikeWidth;
+                    let currentW = Math.min(spikeWidth, h.x + h.w - sx);
+                    ctx.beginPath();
+                    ctx.moveTo(sx, h.y + h.h);
+                    ctx.lineTo(sx + currentW / 2, h.y);
+                    ctx.lineTo(sx + currentW, h.y + h.h);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            }
+
+            ctx.fillStyle = '#ecc94b';
+            for (let c of coins) {
+                if (!c.collected) {
+                    ctx.beginPath();
+                    ctx.arc(c.x + c.w / 2, c.y + c.h / 2, c.w / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#d69e2e';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+            }
+
+            ctx.fillStyle = '#48bb78';
+            ctx.fillRect(goal.x, goal.y, goal.w, goal.h);
+            ctx.fillStyle = '#9ae6b4';
+            ctx.fillRect(goal.x + 5, goal.y + 5, goal.w - 10, goal.h - 10);
+            ctx.fillStyle = '#ed8936';
+            ctx.fillRect(goal.x + goal.w / 2 - 2, goal.y - 15, 4, 15);
+
+            drawAnimal(player.x, player.y, player.width, player.height, player.animal, player.color);
+
+            ctx.restore();
+        }
+
+        function gameClear() {
+            gameState = 'clear';
+            consecutiveGameOverCount = 0;
+            playSound('clear');
+            showModal('ゲームクリア！', `おめでとうございます！全4ステージの縦スクロールタワー完全制覇！\n最終スコア: ${score}`, 'もう一度プレイ', () => {
+                score = 0;
+                currentLevel = 1;
+                loadLevel(currentLevel);
+                gameState = 'playing';
+            });
+        }
+
+        function showModal(title, text, btnText, callback) {
+            const modal = document.getElementById('messageModal');
+            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('modalText').innerText = text;
+            const btn = document.getElementById('modalBtn');
+            btn.innerText = btnText;
+            
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+            
+            newBtn.addEventListener('click', () => {
+                modal.classList.add('hidden');
+                callback();
+            });
+            
+            modal.classList.remove('hidden');
+        }
+
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        loadLevel(currentLevel);
+        loop();
+    </script>
+</body>
+</html>
